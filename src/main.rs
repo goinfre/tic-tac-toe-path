@@ -50,13 +50,9 @@ struct Action {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 enum GameStateInfo {
-    W,   // Forced Win
-    WD,  // Never Lose
-    WDL, // Not Sure
-    WL,  // Never Draw
-    D,   // Forced Draw
-    DL,  // Never Win
-    L,   // Forced Lose
+    W, // Forced Win
+    D, // Forced Draw
+    L, // Forced Lose
 }
 
 enum Progress {
@@ -134,31 +130,21 @@ struct GameStateGraphNode {
     info: Option<GameStateInfo>,
 }
 
-fn build_info(summary: (Player, bool, bool, bool, bool, bool, bool, bool)) -> GameStateInfo {
+fn build_info(summary: (Player, bool, bool, bool)) -> GameStateInfo {
     match summary {
         // Forced Win
-        (Player::You, true, _, _, _, _, _, _) => GameStateInfo::W,
-        (Player::Opponent, true, false, false, false, false, false, false) => GameStateInfo::W,
+        (Player::You, true, _, _) => GameStateInfo::W,
+        (Player::Opponent, true, false, false) => GameStateInfo::W,
 
         // Forced Lose
-        (Player::You, false, false, false, false, false, false, true) => GameStateInfo::L,
-        (Player::Opponent, _, _, _, _, _, _, true) => GameStateInfo::L,
+        (Player::You, false, false, true) => GameStateInfo::L,
+        (Player::Opponent, _, _, true) => GameStateInfo::L,
 
         // Forced Draw
-        (_, false, false, false, false, true, false, false) => GameStateInfo::D,
+        (Player::You, false, true, _) => GameStateInfo::D,
+        (Player::Opponent, _, true, false) => GameStateInfo::D,
 
-        // Never Win
-        (Player::Opponent, _, _, _, _, true, _, _) => GameStateInfo::DL,
-        (Player::Opponent, _, _, _, _, _, true, _) => GameStateInfo::DL,
-        (_, false, false, false, false, _, _, _) => GameStateInfo::DL,
-
-        // Never Lose
-        (_, _, _, false, false, _, false, false) => GameStateInfo::WD,
-
-        // Never Draw
-        (_, _, false, false, _, false, false, _) => GameStateInfo::WL,
-
-        _ => GameStateInfo::WDL,
+        (_, false, false, false) => unreachable!(),
     }
 }
 
@@ -173,21 +159,13 @@ fn build_info_recursively(node: &Rc<RefCell<GameStateGraphNode>>) {
     }
     let mut complete = true;
     let mut has_w = false;
-    let mut has_wd = false;
-    let mut has_wdl = false;
-    let mut has_wl = false;
     let mut has_d = false;
-    let mut has_dl = false;
     let mut has_l = false;
     for (_, next) in node.borrow().actions_from_here.iter() {
         match next.borrow().info {
             None => complete = false,
             Some(GameStateInfo::W) => has_w = true,
-            Some(GameStateInfo::WD) => has_wd = true,
-            Some(GameStateInfo::WDL) => has_wdl = true,
-            Some(GameStateInfo::WL) => has_wl = true,
             Some(GameStateInfo::D) => has_d = true,
-            Some(GameStateInfo::DL) => has_dl = true,
             Some(GameStateInfo::L) => has_l = true,
         }
     }
@@ -197,16 +175,7 @@ fn build_info_recursively(node: &Rc<RefCell<GameStateGraphNode>>) {
 
     let progress = node.borrow().state.progress();
     let info = match progress {
-        Progress::Ongoing => build_info((
-            node.borrow().state.turn,
-            has_w,
-            has_wd,
-            has_wdl,
-            has_wl,
-            has_d,
-            has_dl,
-            has_l,
-        )),
+        Progress::Ongoing => build_info((node.borrow().state.turn, has_w, has_d, has_l)),
         Progress::Draw => GameStateInfo::D,
         Progress::Win(Player::You) => GameStateInfo::W,
         Progress::Win(Player::Opponent) => GameStateInfo::L,
